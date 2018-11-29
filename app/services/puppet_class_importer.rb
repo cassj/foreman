@@ -28,10 +28,13 @@ class PuppetClassImporter
         changes['obsolete'][env] ||= []
         changes['obsolete'][env] << "_destroy_" unless actual_environments.include?(env)
       end
-
+ 
       ignored_environments.each do |env|
-        changes['ignored'][env] ||= []
-        changes['ignored'][env] << '_ignored_'
+        # don't include any regex entries (matches will already have been added as Strings)
+        if (env.is_a?(String))
+          changes['ignored'][env] ||= []
+          changes['ignored'][env] << '_ignored_'
+        end
       end
     else
       changes_for_environment(@environment, changes)
@@ -166,12 +169,25 @@ class PuppetClassImporter
     updated
   end
 
+  def ignored_environment?(envname)
+    ignored_environments.any? do |ignore|
+      if (ignore.is_a?(String) && ignore == envname)
+        return true
+      end
+      if (ignore.is_a?(Regexp) && ignore =~ envname)
+        ignored_environments << envname
+        return true
+      end
+      return false
+    end
+  end
+
   def db_environments
-    @foreman_envs ||= (Environment.pluck('environments.name') - ignored_environments)
+    @foreman_envs ||= (Environment.pluck('environments.name')).find_all{|envname| !(ignored_environment? envname) }
   end
 
   def actual_environments
-    (proxy_environments & (User.current.visible_environments + to_be_created_environments)) - ignored_environments
+    (proxy_environments & (User.current.visible_environments + to_be_created_environments)).find_all{|envname| !(ignored_environment? envname) }
   end
 
   def proxy_environments
